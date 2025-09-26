@@ -54,6 +54,36 @@ The framework uses semantic versioning. You can specify versions in several ways
 
 ## Usage
 
+### Simplified API (Recommended)
+
+The framework now automatically uses the presenting view controller as the delegate, making the API much cleaner:
+
+```swift
+import PhotoLibraryFramework
+
+class ViewController: UIViewController, PhotoLibraryDelegate {
+    
+    @IBAction func selectPhotoTapped() {
+        // Just specify the view controller - it automatically becomes the delegate
+        PhotoLibraryManager.openPicker(from: self, mediaType: .images, selectionLimit: 5)
+    }
+}
+
+extension ViewController: PhotoLibraryDelegate {
+    func photoLibrary(didSelectAssets assets: [PHAsset]) {
+        // Handle selected photos
+    }
+    
+    func photoLibrary(didCaptureImage image: UIImage) {
+        // Handle captured photo
+    }
+    
+    func photoLibraryDidCancel() {
+        // Handle cancellation
+    }
+}
+```
+
 ### Basic Implementation
 
 ```swift
@@ -69,9 +99,8 @@ class ViewController: UIViewController {
     }
     
     @IBAction func selectPhotoTapped() {
-        // New API - use PhotoLibraryManager.openPicker
+        // New simplified API - view controller automatically becomes delegate
         PhotoLibraryManager.openPicker(
-            delegate: self,
             from: self,
             mediaType: .images,
             selectionLimit: 5
@@ -81,16 +110,8 @@ class ViewController: UIViewController {
 
 extension ViewController: PhotoLibraryDelegate {
     func photoLibrary(didSelectAssets assets: [PHAsset]) {
-        // Handle selected photos with async/await
-        guard let firstAsset = assets.first else { return }
-        Task {
-            if let image = await PhotoLibraryManager.shared.getImage(from: firstAsset) {
-                DispatchQueue.main.async {
-                    // Use the image
-                    self.imageView.image = image
-                }
-            }
-        }
+        // Handle multiple selected photos
+        processSelectedAssets(assets)
     }
     
     func photoLibrary(didCaptureImage image: UIImage) {
@@ -103,29 +124,245 @@ extension ViewController: PhotoLibraryDelegate {
         print("User cancelled photo selection")
     }
 }
+
+// MARK: - Asset Processing Examples
+extension ViewController {
+    
+    /// Process single asset with async/await
+    private func processSingleAsset(_ asset: PHAsset) {
+        Task {
+            if let image = await PhotoLibraryManager.shared.getImage(from: asset) {
+                DispatchQueue.main.async {
+                    self.imageView.image = image
+                }
+            }
+        }
+    }
+    
+    /// Process multiple assets with progress tracking
+    private func processSelectedAssets(_ assets: [PHAsset]) {
+        guard !assets.isEmpty else { return }
+        
+        // Show loading indicator
+        showLoadingIndicator()
+        
+        // Process all assets at once
+        PhotoLibraryManager.shared.processAssets(assets) { [weak self] images in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.hideLoadingIndicator()
+                
+                // Handle processed images
+                self.handleProcessedImages(images)
+            }
+        }
+    }
+    
+    /// Handle processed images with validation
+    private func handleProcessedImages(_ images: [UIImage]) {
+        var validImages: [UIImage] = []
+        
+        // Filter images by size (example: max 4MB)
+        for image in images {
+            if let imageData = image.jpegData(compressionQuality: 0.8),
+               imageData.count <= 4 * 1024 * 1024 { // 4MB limit
+                validImages.append(image)
+            } else {
+                print("Image too large, skipping...")
+            }
+        }
+        
+        // Update UI with valid images
+        updateImageCollection(validImages)
+    }
+    
+    /// Individual asset processing with iCloud support
+    private func processAssetWithiCloudSupport(_ asset: PHAsset) {
+        // Check if asset is in iCloud
+        PhotoLibraryManager.shared.isAssetInCloud(asset) { [weak self] isInCloud in
+            if isInCloud {
+                print("Asset is in iCloud, will download...")
+            }
+            
+            // Get image with automatic iCloud handling
+            PhotoLibraryManager.shared.getImage(from: asset) { image, info in
+                DispatchQueue.main.async {
+                    if let image = image {
+                        self?.imageView.image = image
+                    }
+                }
+            }
+        }
+    }
+}
 ```
 
-### Advanced Usage with iCloud Support
+### Multiple Selection with iCloud Support
 
 ```swift
-extension ViewController {
+class ViewController: UIViewController {
+    @IBOutlet weak var collectionView: UICollectionView!
+    private var selectedImages: [UIImage] = []
+    private var isProcessing = false
+    
+    @IBAction func selectMultiplePhotosTapped() {
+        PhotoLibraryManager.openPicker(
+            from: self,
+            mediaType: .images,
+            selectionLimit: 10 // Allow up to 10 images
+        )
+    }
+}
+
+extension ViewController: PhotoLibraryDelegate {
+    func photoLibrary(didSelectAssets assets: [PHAsset]) {
+        processMultipleAssets(assets)
+    }
+    
+    // MARK: - iCloud Progress Tracking
     func photoLibrary(didStartDownloadingFromCloud asset: PHAsset) {
-        // Show loading indicator
+        DispatchQueue.main.async {
+            self.showProgressIndicator(message: "Downloading from iCloud...")
+        }
     }
     
     func photoLibrary(downloadProgress progress: Double, for asset: PHAsset) {
-        // Update progress bar
+        DispatchQueue.main.async {
+            self.updateProgress(progress)
+        }
     }
     
     func photoLibrary(didFinishDownloading image: UIImage?, for asset: PHAsset, error: Error?) {
-        // Handle download completion
+        if let error = error {
+            print("Download failed: \(error.localizedDescription)")
+        } else if let image = image {
+            print("Successfully downloaded image from iCloud")
+        }
     }
     
     func photoLibrary(iCloudAuthenticationRequired asset: PHAsset, retryHandler: @escaping () -> Void) {
-        // Handle iCloud authentication
-        showAlert(message: "Please sign in to iCloud") {
+        showAlert(
+            title: "iCloud Sign In Required",
+            message: "Please sign in to iCloud in Settings to access your photos."
+        ) { [weak self] in
             retryHandler()
         }
+    }
+}
+
+// MARK: - Multiple Asset Processing
+extension ViewController {
+    private func processMultipleAssets(_ assets: [PHAsset]) {
+        guard !isProcessing else { return }
+        isProcessing = true
+        
+        showLoadingIndicator()
+        
+        // Method 1: Process all at once (recommended for multiple assets)
+        PhotoLibraryManager.shared.processAssets(assets, targetSize: CGSize(width: 1024, height: 1024)) { [weak self] images in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.hideLoadingIndicator()
+                self.isProcessing = false
+                self.handleProcessedImages(images)
+            }
+        }
+        
+        // Method 2: Process individually with async/await (for more control)
+        // processAssetsIndividually(assets)
+    }
+    
+    private func processAssetsIndividually(_ assets: [PHAsset]) {
+        Task {
+            var processedImages: [UIImage] = []
+            
+            for (index, asset) in assets.enumerated() {
+                // Update progress
+                await MainActor.run {
+                    updateProgress(Double(index) / Double(assets.count))
+                }
+                
+                // Check if asset is in iCloud
+                let isInCloud = await withCheckedContinuation { continuation in
+                    PhotoLibraryManager.shared.isAssetInCloud(asset) { isInCloud in
+                        continuation.resume(returning: isInCloud)
+                    }
+                }
+                
+                if isInCloud {
+                    await MainActor.run {
+                        showMessage("Downloading image \(index + 1) from iCloud...")
+                    }
+                }
+                
+                // Get image
+                if let image = await PhotoLibraryManager.shared.getImage(from: asset, targetSize: CGSize(width: 1024, height: 1024)) {
+                    processedImages.append(image)
+                }
+            }
+            
+            await MainActor.run {
+                hideLoadingIndicator()
+                isProcessing = false
+                handleProcessedImages(processedImages)
+            }
+        }
+    }
+    
+    private func handleProcessedImages(_ images: [UIImage]) {
+        // Validate image sizes
+        let validImages = images.filter { image in
+            guard let imageData = image.jpegData(compressionQuality: 0.8) else { return false }
+            let sizeMB = Double(imageData.count) / (1024 * 1024)
+            
+            if sizeMB > 4.0 {
+                showAlert(message: "Image too large (max 4MB), skipping...")
+                return false
+            }
+            return true
+        }
+        
+        // Add to collection
+        selectedImages.append(contentsOf: validImages)
+        
+        // Update UI
+        collectionView.reloadData()
+        
+        // Show completion message
+        showAlert(message: "Successfully processed \(validImages.count) images")
+    }
+}
+
+// MARK: - UI Helper Methods
+extension ViewController {
+    private func showLoadingIndicator() {
+        // Show your loading spinner
+    }
+    
+    private func hideLoadingIndicator() {
+        // Hide your loading spinner
+    }
+    
+    private func showProgressIndicator(message: String) {
+        // Show progress with message
+    }
+    
+    private func updateProgress(_ progress: Double) {
+        // Update progress bar (0.0 to 1.0)
+    }
+    
+    private func showMessage(_ message: String) {
+        print(message) // Or show toast/alert
+    }
+    
+    private func showAlert(title: String = "Info", message: String, completion: (() -> Void)? = nil) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
+            completion?()
+        })
+        present(alert, animated: true)
     }
 }
 ```
@@ -152,7 +389,14 @@ Core manager for photo operations with simplified API.
 ```swift
 // Open photo picker (new simplified API)
 PhotoLibraryManager.openPicker(
-    delegate: self,
+    from: viewController, // viewController must conform to PhotoLibraryDelegate
+    mediaType: .imagesAndVideos,
+    selectionLimit: 10
+)
+
+// Alternative: Custom delegate (for advanced use cases)
+PhotoLibraryManager.openPicker(
+    delegate: customDelegate,
     from: viewController,
     mediaType: .imagesAndVideos,
     selectionLimit: 10
@@ -187,6 +431,78 @@ PhotoLibraryManager.shared.getImage(from: asset) { image, info in
 - `areAllPermissionsGranted()` - Check if all permissions are granted
 - `requestPhotoLibraryPermission(_:)` - Request photo library access
 - `requestCameraPermission(_:)` - Request camera access
+
+### Image Processing Utilities
+
+```swift
+// Resize and compress images
+extension ViewController {
+    private func processImageForUpload(_ image: UIImage) -> Data? {
+        // Resize to maximum dimensions
+        let maxSize = CGSize(width: 1024, height: 1024)
+        guard let resizedImage = PhotoUtilities.resizeImage(image, to: maxSize) else {
+            return nil
+        }
+        
+        // Compress with quality
+        return PhotoUtilities.compressImage(resizedImage, quality: 0.8)
+    }
+    
+    private func getAssetMetadata(_ asset: PHAsset) {
+        let metadata = PhotoUtilities.getMetadata(for: asset)
+        
+        print("Asset Info:")
+        print("- Type: \(metadata["mediaType"] ?? "Unknown")")
+        print("- Size: \(metadata["sizeInMB"] ?? 0) MB")
+        print("- Dimensions: \(metadata["pixelWidth"] ?? 0) x \(metadata["pixelHeight"] ?? 0)")
+        print("- Created: \(metadata["creationDate"] ?? "Unknown")")
+        
+        if let latitude = metadata["latitude"] as? Double,
+           let longitude = metadata["longitude"] as? Double {
+            print("- Location: \(latitude), \(longitude)")
+        }
+    }
+}
+```
+
+### Permission Management
+
+```swift
+// Check and request permissions
+extension ViewController {
+    private func checkPermissions() {
+        // Check current status
+        let photoStatus = PermissionManager.photoLibraryAuthorizationStatus()
+        let cameraStatus = PermissionManager.cameraAuthorizationStatus()
+        
+        print("Photo Library: \(photoStatus)")
+        print("Camera: \(cameraStatus)")
+        
+        // Check if all permissions are granted
+        if PermissionManager.areAllPermissionsGranted() {
+            print("All permissions granted!")
+        } else {
+            requestMissingPermissions()
+        }
+    }
+    
+    private func requestMissingPermissions() {
+        // Request photo library permission
+        PermissionManager.requestPhotoLibraryPermission { status in
+            DispatchQueue.main.async {
+                print("Photo library permission: \(status)")
+            }
+        }
+        
+        // Request camera permission
+        PermissionManager.requestCameraPermission { granted in
+            DispatchQueue.main.async {
+                print("Camera permission granted: \(granted)")
+            }
+        }
+    }
+}
+```
 
 ### Theme Management
 

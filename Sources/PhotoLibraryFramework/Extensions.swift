@@ -90,23 +90,25 @@ public extension Array where Element == PHAsset {
 
 public extension UIViewController {
     
-    /// Convenience method to present photo picker
+    /// Convenience method to present photo picker (requires view controller to conform to PhotoLibraryDelegate)
     /// - Parameters:
-    ///   - delegate: PhotoLibraryDelegate
     ///   - mediaType: Type of media to select
     ///   - selectionLimit: Maximum selection limit
     ///   - sourceView: Source view for popover (iPad)
     ///   - sourceRect: Source rect for popover (iPad)
     func presentPhotoLibrary(
-        delegate: PhotoLibraryDelegate,
         mediaType: MediaType = .imagesAndVideos,
         selectionLimit: Int = 1,
         sourceView: UIView? = nil,
         sourceRect: CGRect = .zero
     ) {
+        guard let delegateViewController = self as? (UIViewController & PhotoLibraryDelegate) else {
+            assertionFailure("View controller must conform to PhotoLibraryDelegate to use this convenience method")
+            return
+        }
+        
         PhotoLibraryManager.openPicker(
-            delegate: delegate,
-            from: self,
+            from: delegateViewController,
             mediaType: mediaType,
             selectionLimit: selectionLimit,
             sourceView: sourceView,
