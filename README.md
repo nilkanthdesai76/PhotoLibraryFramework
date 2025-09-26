@@ -614,7 +614,26 @@ extension ViewController {
 }
 ```
 
-#### Option 2: Check Access Level and Guide User
+#### Option 2: Use Built-in Selected Assets Picker (Recommended for Limited Access)
+```swift
+@IBAction func selectPhotosTapped() {
+    // The framework automatically detects limited access and shows the appropriate picker
+    PhotoLibraryManager.openPicker(
+        from: self,
+        mediaType: .images,
+        selectionLimit: 5,
+        useSelectedAssetsForLimitedAccess: true // Default is true
+    )
+}
+
+// This automatically:
+// - Shows system PHPicker for full access
+// - Shows custom SelectedAssetsViewController for limited access
+// - Only displays photos the user has actually granted access to
+// - Prevents the "empty assets" issue completely
+```
+
+#### Option 3: Check Access Level and Guide User
 ```swift
 @IBAction func selectPhotosTapped() {
     // Check access level first
@@ -650,7 +669,7 @@ private func showLimitedAccessAlert() {
 }
 ```
 
-#### Option 3: Request Full Access
+#### Option 4: Request Full Access
 ```swift
 private func requestFullPhotoAccess() {
     if #available(iOS 14.0, *) {
@@ -660,14 +679,41 @@ private func requestFullPhotoAccess() {
                 print("Full access granted")
                 self.openPhotoPicker()
             case .limited:
-                print("Still limited access")
-                self.handleLimitedAccess()
+                print("Still limited access - framework will handle automatically")
+                self.openPhotoPicker()
             default:
                 print("Access denied")
             }
         }
     }
 }
+```
+
+### Built-in Selected Assets Picker
+
+The framework includes a **SelectedAssetsViewController** that automatically handles limited photo access:
+
+**Features:**
+- ✅ **Only shows granted photos** - No empty assets issue
+- ✅ **Native iOS design** - Looks like system photo picker
+- ✅ **iCloud support** - Downloads and shows iCloud photos
+- ✅ **Video duration display** - Shows video length
+- ✅ **Selection indicators** - Clear visual feedback
+- ✅ **Manage button** - Easy access to photo permissions
+- ✅ **Automatic detection** - Used automatically for limited access
+
+**Usage:**
+```swift
+// Automatic (recommended) - framework chooses the right picker
+PhotoLibraryManager.openPicker(from: self, mediaType: .images, selectionLimit: 5)
+
+// Manual control
+PhotoLibraryManager.openPicker(
+    from: self,
+    mediaType: .images,
+    selectionLimit: 5,
+    useSelectedAssetsForLimitedAccess: true // or false to always use system picker
+)
 ```
 
 ### Debug Information

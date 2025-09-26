@@ -122,12 +122,14 @@ internal extension PhotoLibraryDelegate {
   ///   - selectionLimit: Maximum number of items to select (1 for single selection)
   ///   - sourceView: Source view for iPad popover presentation
   ///   - sourceRect: Source rect for iPad popover presentation
+  ///   - useSelectedAssetsForLimitedAccess: If true, shows custom picker for limited access instead of system picker
   @objc public static func openPicker(
     from viewController: UIViewController & PhotoLibraryDelegate,
     mediaType: MediaType = .imagesAndVideos,
     selectionLimit: Int = 1,
     sourceView: UIView? = nil,
-    sourceRect: CGRect = .zero
+    sourceRect: CGRect = .zero,
+    useSelectedAssetsForLimitedAccess: Bool = true
   ) {
     shared.presentPhotoPicker(
       delegate: viewController,
@@ -135,7 +137,8 @@ internal extension PhotoLibraryDelegate {
       mediaType: mediaType,
       selectionLimit: selectionLimit,
       sourceView: sourceView,
-      sourceRect: sourceRect
+      sourceRect: sourceRect,
+      useSelectedAssetsForLimitedAccess: useSelectedAssetsForLimitedAccess
     )
   }
 
@@ -147,13 +150,15 @@ internal extension PhotoLibraryDelegate {
   ///   - selectionLimit: Maximum number of items to select (1 for single selection)
   ///   - sourceView: Source view for iPad popover presentation
   ///   - sourceRect: Source rect for iPad popover presentation
+  ///   - useSelectedAssetsForLimitedAccess: If true, shows custom picker for limited access instead of system picker
   @objc public static func openPicker(
     delegate: PhotoLibraryDelegate,
     from viewController: UIViewController,
     mediaType: MediaType = .imagesAndVideos,
     selectionLimit: Int = 1,
     sourceView: UIView? = nil,
-    sourceRect: CGRect = .zero
+    sourceRect: CGRect = .zero,
+    useSelectedAssetsForLimitedAccess: Bool = true
   ) {
     shared.presentPhotoPicker(
       delegate: delegate,
@@ -161,7 +166,8 @@ internal extension PhotoLibraryDelegate {
       mediaType: mediaType,
       selectionLimit: selectionLimit,
       sourceView: sourceView,
-      sourceRect: sourceRect
+      sourceRect: sourceRect,
+      useSelectedAssetsForLimitedAccess: useSelectedAssetsForLimitedAccess
     )
   }
 
@@ -172,7 +178,8 @@ internal extension PhotoLibraryDelegate {
     mediaType: MediaType = .imagesAndVideos,
     selectionLimit: Int = 1,
     sourceView: UIView? = nil,
-    sourceRect: CGRect = .zero
+    sourceRect: CGRect = .zero,
+    useSelectedAssetsForLimitedAccess: Bool = true
   ) {
     guard selectionLimit > 0 else {
       assertionFailure(Messages.Errors.selectionLimit)
@@ -185,6 +192,16 @@ internal extension PhotoLibraryDelegate {
     self.currentSelectionLimit = selectionLimit
     self.sourceView = sourceView ?? viewController.view
     self.sourceRect = sourceRect
+
+    // Check if we should use SelectedAssetsViewController for limited access
+    if #available(iOS 14.0, *), useSelectedAssetsForLimitedAccess {
+      let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+      if authStatus == .limited {
+        print("PhotoLibrary: Limited access detected - using SelectedAssetsViewController")
+        presentSelectedAssetsViewController()
+        return
+      }
+    }
 
     presentSourceSelectionAlert()
   }
@@ -616,6 +633,25 @@ extension PhotoLibraryManager {
     {
       UIApplication.shared.open(settingsURL)
     }
+  }
+
+  fileprivate func presentSelectedAssetsViewController() {
+    let selectedAssetsVC = SelectedAssetsViewController()
+    selectedAssetsVC.mediaType = currentMediaType
+    selectedAssetsVC.selectionLimit = currentSelectionLimit
+    
+    selectedAssetsVC.completion = { [weak self] assets in
+      print("SelectedAssets: User selected \(assets.count) assets")
+      self?.delegate?.photoLibrary(didSelectAssets: assets)
+    }
+    
+    selectedAssetsVC.cancellation = { [weak self] in
+      print("SelectedAssets: User cancelled selection")
+      self?.delegate?.photoLibraryDidCancel()
+    }
+    
+    selectedAssetsVC.modalPresentationStyle = .fullScreen
+    presentingViewController?.present(selectedAssetsVC, animated: true)
   }
 
   fileprivate func isICloudAuthenticationError(_ error: Error?) -> Bool {
