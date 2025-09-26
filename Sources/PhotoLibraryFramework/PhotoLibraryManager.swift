@@ -67,7 +67,7 @@ public struct Messages {
   /// Called when user cancels the picker
   func photoLibraryDidCancel()
 
-  // Optional fallback method for when PHAssets are not available
+  // Optional fallback method for when PHAssets are not available (limited access, external sources)
   @objc optional func photoLibrary(didSelectImages images: [UIImage])
 
   // Optional iCloud support methods
@@ -77,6 +77,20 @@ public struct Messages {
     didFinishDownloading image: UIImage?, for asset: PHAsset, error: Error?)
   @objc optional func photoLibrary(
     iCloudAuthenticationRequired asset: PHAsset, retryHandler: @escaping () -> Void)
+}
+
+// MARK: - Internal Helper for Delegate Method Detection
+internal extension PhotoLibraryDelegate {
+  /// Check if the delegate implements the didSelectImages method
+  var implementsDidSelectImages: Bool {
+    // Convert to NSObject to use responds(to:) if possible
+    if let objcDelegate = self as? NSObject {
+      return objcDelegate.responds(to: #selector(PhotoLibraryDelegate.photoLibrary(didSelectImages:)))
+    }
+    // For pure Swift objects, we can't detect implementation
+    // So we assume it might be implemented and try to call it
+    return true
+  }
 }
 
 // MARK: - Main Manager Class
@@ -766,15 +780,20 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
   private func handleImagesWithoutAssets(_ images: [UIImage]) {
     print("PHPicker: Handling \(images.count) images without PHAssets")
     
-    // Try the new delegate method first
-    if let delegate = delegate, delegate.responds(to: #selector(PhotoLibraryDelegate.photoLibrary(didSelectImages:))) {
-      print("PHPicker: Using didSelectImages delegate method")
+    guard let delegate = delegate else {
+      print("PHPicker: No delegate available")
+      return
+    }
+    
+    // Check if delegate implements the didSelectImages method
+    if delegate.implementsDidSelectImages {
+      print("PHPicker: Delegate supports didSelectImages - calling with \(images.count) images")
       delegate.photoLibrary?(didSelectImages: images)
     } else {
-      // Fallback: call didSelectAssets with empty array and log warning
-      print("PHPicker: Warning - didSelectImages not implemented, calling didSelectAssets with empty array")
-      print("PHPicker: Consider implementing photoLibrary(didSelectImages:) for better compatibility")
-      delegate?.photoLibrary(didSelectAssets: [])
+      print("PHPicker: Delegate doesn't implement didSelectImages")
+      print("PHPicker: Calling didSelectAssets with empty array as fallback")
+      print("PHPicker: Consider implementing photoLibrary(didSelectImages:) for better limited access support")
+      delegate.photoLibrary(didSelectAssets: [])
     }
   }
 }

@@ -561,21 +561,55 @@ If you're upgrading from a version with PLF prefixes, here are the key changes:
 
 #### Option 1: Implement Fallback Delegate Method (Recommended)
 ```swift
-extension ViewController: PhotoLibraryDelegate {
+class ViewController: UIViewController, PhotoLibraryDelegate {
+    
     func photoLibrary(didSelectAssets assets: [PHAsset]) {
         if assets.isEmpty {
-            print("Empty assets - framework will call didSelectImages fallback")
+            print("Empty assets - limited access detected, didSelectImages will be called")
             return
         }
         // Handle PHAssets normally (full access)
         processAssets(assets)
     }
     
-    // Add this method to handle limited access
+    // IMPORTANT: Add this method to handle limited access
     func photoLibrary(didSelectImages images: [UIImage]) {
         print("Limited access: Received \(images.count) images without PHAssets")
         // Handle UIImages directly - same processing as PHAssets but with UIImages
         processImages(images)
+    }
+    
+    // Your existing methods...
+    func photoLibrary(didCaptureImage image: UIImage) { }
+    func photoLibraryDidCancel() { }
+}
+
+// Helper methods
+extension ViewController {
+    private func processAssets(_ assets: [PHAsset]) {
+        // Your existing PHAsset processing
+        guard let firstAsset = assets.first else { return }
+        Task {
+            if let image = await PhotoLibraryManager.shared.getImage(from: firstAsset) {
+                DispatchQueue.main.async {
+                    self.handleImage(image)
+                }
+            }
+        }
+    }
+    
+    private func processImages(_ images: [UIImage]) {
+        // Process UIImages directly (for limited access)
+        guard let firstImage = images.first else { return }
+        handleImage(firstImage)
+    }
+    
+    private func handleImage(_ image: UIImage) {
+        // Common image handling logic
+        self.imgProfile.image = image
+        let imgData = image.resizeIntoData()!
+        let newImage = UIImage(data: imgData)!
+        self.uploadPhoto(image: newImage)
     }
 }
 ```
