@@ -653,7 +653,7 @@ extension PhotoLibraryManager {
       self?.delegate?.photoLibraryDidCancel()
     }
 
-    // selectedAssetsVC.modalPresentationStyle = .fullScreen
+    selectedAssetsVC.modalPresentationStyle = .fullScreen
     presentingViewController?.present(selectedAssetsVC, animated: true)
   }
 
