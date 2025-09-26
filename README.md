@@ -548,32 +548,89 @@ If you're upgrading from a version with PLF prefixes, here are the key changes:
 
 ## Troubleshooting
 
-### Empty Assets Array Issue
+### Limited Photo Access Issue
 
-If you're receiving an empty assets array in `didSelectAssets`, this can happen due to:
+**The Problem**: When users grant "Limited Photo Access", iOS shows the system photo picker that allows selecting from all photos, but the selected photos don't have PHAsset identifiers. This results in an empty assets array.
 
-1. **Limited Photo Library Access**: User granted limited access to photos
-2. **Photo Source**: Photos from external sources (AirDrop, etc.) may not have PHAssets
-3. **Permission Issues**: Insufficient photo library permissions
+**Why This Happens**:
+1. **Limited Access**: User selected "Select Photos" instead of "Allow Access to All Photos"
+2. **System Behavior**: iOS shows full photo picker but doesn't provide asset identifiers for privacy
+3. **Framework Limitation**: PHPickerViewController returns results without `assetIdentifier` for limited access
 
-**Solution**: Implement the optional `didSelectImages` delegate method:
+**Solutions**:
 
+#### Option 1: Implement Fallback Delegate Method (Recommended)
 ```swift
 extension ViewController: PhotoLibraryDelegate {
     func photoLibrary(didSelectAssets assets: [PHAsset]) {
         if assets.isEmpty {
-            print("Empty assets - will fallback to didSelectImages if available")
+            print("Empty assets - framework will call didSelectImages fallback")
             return
         }
-        // Handle PHAssets normally
+        // Handle PHAssets normally (full access)
+        processAssets(assets)
     }
     
-    // Add this optional method for fallback
+    // Add this method to handle limited access
     func photoLibrary(didSelectImages images: [UIImage]) {
-        print("Fallback: Received \(images.count) images without PHAssets")
-        // Handle UIImages directly
-        for image in images {
-            // Process image
+        print("Limited access: Received \(images.count) images without PHAssets")
+        // Handle UIImages directly - same processing as PHAssets but with UIImages
+        processImages(images)
+    }
+}
+```
+
+#### Option 2: Check Access Level and Guide User
+```swift
+@IBAction func selectPhotosTapped() {
+    // Check access level first
+    if #available(iOS 14.0, *) {
+        if PhotoLibraryManager.hasLimitedPhotoAccess() {
+            showLimitedAccessAlert()
+            return
+        }
+    }
+    
+    // Proceed with normal picker
+    PhotoLibraryManager.openPicker(from: self, mediaType: .images, selectionLimit: 5)
+}
+
+private func showLimitedAccessAlert() {
+    let alert = UIAlertController(
+        title: "Limited Photo Access",
+        message: "For best experience, please allow access to all photos in Settings.",
+        preferredStyle: .alert
+    )
+    
+    alert.addAction(UIAlertAction(title: "Continue Anyway", style: .default) { _ in
+        PhotoLibraryManager.openPicker(from: self, mediaType: .images, selectionLimit: 5)
+    })
+    
+    alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { _ in
+        if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(settingsURL)
+        }
+    })
+    
+    present(alert, animated: true)
+}
+```
+
+#### Option 3: Request Full Access
+```swift
+private func requestFullPhotoAccess() {
+    if #available(iOS 14.0, *) {
+        PhotoLibraryManager.requestFullPhotoAccess { status in
+            switch status {
+            case .authorized:
+                print("Full access granted")
+                self.openPhotoPicker()
+            case .limited:
+                print("Still limited access")
+                self.handleLimitedAccess()
+            default:
+                print("Access denied")
+            }
         }
     }
 }

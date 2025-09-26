@@ -300,6 +300,34 @@ public struct Messages {
       completion(processedImages)
     }
   }
+  
+  /// Check if user has limited photo library access
+  /// - Returns: True if user has limited access (iOS 14+)
+  @available(iOS 14.0, *)
+  @objc public static func hasLimitedPhotoAccess() -> Bool {
+    return PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited
+  }
+  
+  /// Get current photo library authorization status
+  /// - Returns: Current authorization status
+  @objc public static func photoLibraryAuthorizationStatus() -> PHAuthorizationStatus {
+    if #available(iOS 14.0, *) {
+      return PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    } else {
+      return PHPhotoLibrary.authorizationStatus()
+    }
+  }
+  
+  /// Request full photo library access (shows system settings)
+  /// - Parameter completion: Completion handler with new status
+  @available(iOS 14.0, *)
+  @objc public static func requestFullPhotoAccess(completion: @escaping (PHAuthorizationStatus) -> Void) {
+    PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+      DispatchQueue.main.async {
+        completion(status)
+      }
+    }
+  }
 }
 
 // MARK: - Private Methods
@@ -448,12 +476,26 @@ extension PhotoLibraryManager {
       let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
       print("PhotoLibrary: Authorization status: \(authStatus.rawValue)")
       
+      // Handle limited access specifically
+      if authStatus == .limited {
+        print("PhotoLibrary: Limited access detected - PHPicker will show system picker")
+        print("PhotoLibrary: Note: Selected photos may not have PHAsset identifiers")
+        print("PhotoLibrary: Framework will automatically fallback to UIImage handling")
+      }
+      
       var config = PHPickerConfiguration(photoLibrary: .shared())
       config.selectionLimit = currentSelectionLimit
       config.filter = currentMediaType.phPickerFilter
       
-      // Important: Set preferredAssetRepresentationMode to ensure we get asset identifiers
+      // For limited access, we need to handle the fact that asset identifiers might be nil
+      // Set preferredAssetRepresentationMode to current for best compatibility
       config.preferredAssetRepresentationMode = .current
+      
+      // For limited access, the system picker allows access to all photos
+      // but the selected photos won't have proper asset identifiers
+      if authStatus == .limited {
+        print("PhotoLibrary: Configuring for limited access - expecting UIImage fallback")
+      }
 
       if #available(iOS 15.0, *) {
         config.selection = .ordered
@@ -618,6 +660,14 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
 
     print("PHPicker: Received \(results.count) results")
     
+    // Check current authorization status to understand the context
+    let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    print("PHPicker: Current auth status: \(authStatus.rawValue)")
+    
+    if authStatus == .limited {
+      print("PHPicker: Limited access - system picker was shown, asset identifiers likely unavailable")
+    }
+    
     // Check if we have asset identifiers
     let identifiers = results.compactMap { result -> String? in
       let identifier = result.assetIdentifier
@@ -625,7 +675,15 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
       return identifier
     }
     
-    print("PHPicker: Found \(identifiers.count) valid identifiers")
+    print("PHPicker: Found \(identifiers.count) valid identifiers out of \(results.count) results")
+    
+    // For limited access, we expect most/all identifiers to be nil
+    if authStatus == .limited && identifiers.isEmpty {
+      print("PHPicker: Expected behavior for limited access - no asset identifiers available")
+      print("PHPicker: Converting to UIImages directly")
+      handlePickerResultsWithoutAssets(results)
+      return
+    }
     
     if identifiers.isEmpty {
       // Handle case where no asset identifiers are available
@@ -651,8 +709,14 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
 
     if assets.isEmpty {
       // Fallback to handling results without PHAssets
+      print("PHPicker: No valid PHAssets found, falling back to UIImage conversion")
       handlePickerResultsWithoutAssets(results)
     } else {
+      // We have some valid PHAssets
+      if assets.count < results.count {
+        print("PHPicker: Warning - only \(assets.count) of \(results.count) results have valid PHAssets")
+        print("PHPicker: This is common with limited photo access")
+      }
       delegate?.photoLibrary(didSelectAssets: assets)
     }
   }
