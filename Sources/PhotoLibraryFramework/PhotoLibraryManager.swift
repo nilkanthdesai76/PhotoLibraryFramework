@@ -109,6 +109,7 @@ extension PhotoLibraryDelegate {
 
   private var currentMediaType: MediaType = .imagesAndVideos
   private var currentSelectionLimit: Int = 1
+  private var useSelectedAssetsForLimitedAccess: Bool = true
 
   private override init() {
     super.init()
@@ -193,17 +194,11 @@ extension PhotoLibraryDelegate {
     self.currentSelectionLimit = selectionLimit
     self.sourceView = sourceView ?? viewController.view
     self.sourceRect = sourceRect
+    
+    // Store the useSelectedAssetsForLimitedAccess setting for later use
+    self.useSelectedAssetsForLimitedAccess = useSelectedAssetsForLimitedAccess
 
-    // Check if we should use SelectedAssetsViewController for limited access
-    if #available(iOS 14.0, *), useSelectedAssetsForLimitedAccess {
-      let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-      if authStatus == .limited {
-        print("PhotoLibrary: Limited access detected - using SelectedAssetsViewController")
-        presentSelectedAssetsViewController()
-        return
-      }
-    }
-
+    // Always show the camera/gallery selection alert first
     presentSourceSelectionAlert()
   }
 
@@ -510,7 +505,14 @@ extension PhotoLibraryManager {
       let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
       print("PhotoLibrary: Authorization status: \(authStatus.rawValue)")
 
-      // Handle limited access specifically
+      // Check if we should use SelectedAssetsViewController for limited access
+      if authStatus == .limited && useSelectedAssetsForLimitedAccess {
+        print("PhotoLibrary: Limited access detected - using SelectedAssetsViewController")
+        presentSelectedAssetsViewController()
+        return
+      }
+
+      // Handle limited access with system picker
       if authStatus == .limited {
         print("PhotoLibrary: Limited access detected - PHPicker will show system picker")
         print("PhotoLibrary: Note: Selected photos may not have PHAsset identifiers")
