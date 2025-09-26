@@ -80,12 +80,13 @@ public struct Messages {
 }
 
 // MARK: - Internal Helper for Delegate Method Detection
-internal extension PhotoLibraryDelegate {
+extension PhotoLibraryDelegate {
   /// Check if the delegate implements the didSelectImages method
   var implementsDidSelectImages: Bool {
     // Convert to NSObject to use responds(to:) if possible
     if let objcDelegate = self as? NSObject {
-      return objcDelegate.responds(to: #selector(PhotoLibraryDelegate.photoLibrary(didSelectImages:)))
+      return objcDelegate.responds(
+        to: #selector(PhotoLibraryDelegate.photoLibrary(didSelectImages:)))
     }
     // For pure Swift objects, we can't detect implementation
     // So we assume it might be implemented and try to call it
@@ -331,14 +332,14 @@ internal extension PhotoLibraryDelegate {
       completion(processedImages)
     }
   }
-  
+
   /// Check if user has limited photo library access
   /// - Returns: True if user has limited access (iOS 14+)
   @available(iOS 14.0, *)
   @objc public static func hasLimitedPhotoAccess() -> Bool {
     return PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited
   }
-  
+
   /// Get current photo library authorization status
   /// - Returns: Current authorization status
   @objc public static func photoLibraryAuthorizationStatus() -> PHAuthorizationStatus {
@@ -348,11 +349,13 @@ internal extension PhotoLibraryDelegate {
       return PHPhotoLibrary.authorizationStatus()
     }
   }
-  
+
   /// Request full photo library access (shows system settings)
   /// - Parameter completion: Completion handler with new status
   @available(iOS 14.0, *)
-  @objc public static func requestFullPhotoAccess(completion: @escaping (PHAuthorizationStatus) -> Void) {
+  @objc public static func requestFullPhotoAccess(
+    completion: @escaping (PHAuthorizationStatus) -> Void
+  ) {
     PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
       DispatchQueue.main.async {
         completion(status)
@@ -501,27 +504,27 @@ extension PhotoLibraryManager {
     print("PhotoLibrary: Opening photo library")
     print("PhotoLibrary: Selection limit: \(currentSelectionLimit)")
     print("PhotoLibrary: Media type: \(currentMediaType)")
-    
+
     if #available(iOS 14.0, *) {
       // Check current authorization status
       let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
       print("PhotoLibrary: Authorization status: \(authStatus.rawValue)")
-      
+
       // Handle limited access specifically
       if authStatus == .limited {
         print("PhotoLibrary: Limited access detected - PHPicker will show system picker")
         print("PhotoLibrary: Note: Selected photos may not have PHAsset identifiers")
         print("PhotoLibrary: Framework will automatically fallback to UIImage handling")
       }
-      
+
       var config = PHPickerConfiguration(photoLibrary: .shared())
       config.selectionLimit = currentSelectionLimit
       config.filter = currentMediaType.phPickerFilter
-      
+
       // For limited access, we need to handle the fact that asset identifiers might be nil
       // Set preferredAssetRepresentationMode to current for best compatibility
       config.preferredAssetRepresentationMode = .current
-      
+
       // For limited access, the system picker allows access to all photos
       // but the selected photos won't have proper asset identifiers
       if authStatus == .limited {
@@ -639,18 +642,18 @@ extension PhotoLibraryManager {
     let selectedAssetsVC = SelectedAssetsViewController()
     selectedAssetsVC.mediaType = currentMediaType
     selectedAssetsVC.selectionLimit = currentSelectionLimit
-    
+
     selectedAssetsVC.completion = { [weak self] assets in
       print("SelectedAssets: User selected \(assets.count) assets")
       self?.delegate?.photoLibrary(didSelectAssets: assets)
     }
-    
+
     selectedAssetsVC.cancellation = { [weak self] in
       print("SelectedAssets: User cancelled selection")
       self?.delegate?.photoLibraryDidCancel()
     }
-    
-    selectedAssetsVC.modalPresentationStyle = .fullScreen
+
+    // selectedAssetsVC.modalPresentationStyle = .fullScreen
     presentingViewController?.present(selectedAssetsVC, animated: true)
   }
 
@@ -709,24 +712,25 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
     }
 
     print("PHPicker: Received \(results.count) results")
-    
+
     // Check current authorization status to understand the context
     let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
     print("PHPicker: Current auth status: \(authStatus.rawValue)")
-    
+
     if authStatus == .limited {
-      print("PHPicker: Limited access - system picker was shown, asset identifiers likely unavailable")
+      print(
+        "PHPicker: Limited access - system picker was shown, asset identifiers likely unavailable")
     }
-    
+
     // Check if we have asset identifiers
     let identifiers = results.compactMap { result -> String? in
       let identifier = result.assetIdentifier
       print("PHPicker: Asset identifier: \(identifier ?? "nil")")
       return identifier
     }
-    
+
     print("PHPicker: Found \(identifiers.count) valid identifiers out of \(results.count) results")
-    
+
     // For limited access, we expect most/all identifiers to be nil
     if authStatus == .limited && identifiers.isEmpty {
       print("PHPicker: Expected behavior for limited access - no asset identifiers available")
@@ -734,7 +738,7 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
       handlePickerResultsWithoutAssets(results)
       return
     }
-    
+
     if identifiers.isEmpty {
       // Handle case where no asset identifiers are available
       // This can happen with limited photo library access or external sources
@@ -754,7 +758,7 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
         print("PHPicker: Failed to fetch asset for identifier: \(identifier)")
       }
     }
-    
+
     print("PHPicker: Final assets count: \(assets.count)")
 
     if assets.isEmpty {
@@ -764,31 +768,33 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
     } else {
       // We have some valid PHAssets
       if assets.count < results.count {
-        print("PHPicker: Warning - only \(assets.count) of \(results.count) results have valid PHAssets")
+        print(
+          "PHPicker: Warning - only \(assets.count) of \(results.count) results have valid PHAssets"
+        )
         print("PHPicker: This is common with limited photo access")
       }
       delegate?.photoLibrary(didSelectAssets: assets)
     }
   }
-  
+
   private func handlePickerResultsWithoutAssets(_ results: [PHPickerResult]) {
     print("PHPicker: Handling results without PHAssets - converting to UIImages")
-    
+
     var processedImages: [UIImage] = []
     let group = DispatchGroup()
-    
+
     for result in results {
       group.enter()
-      
+
       if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
         result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
           defer { group.leave() }
-          
+
           if let error = error {
             print("PHPicker: Error loading image: \(error)")
             return
           }
-          
+
           if let image = object as? UIImage {
             processedImages.append(image)
             print("PHPicker: Successfully loaded image")
@@ -799,10 +805,10 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
         print("PHPicker: Cannot load object as UIImage")
       }
     }
-    
+
     group.notify(queue: .main) {
       print("PHPicker: Processed \(processedImages.count) images without PHAssets")
-      
+
       if processedImages.isEmpty {
         self.delegate?.photoLibraryDidCancel()
       } else {
@@ -812,15 +818,15 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
       }
     }
   }
-  
+
   private func handleImagesWithoutAssets(_ images: [UIImage]) {
     print("PHPicker: Handling \(images.count) images without PHAssets")
-    
+
     guard let delegate = delegate else {
       print("PHPicker: No delegate available")
       return
     }
-    
+
     // Check if delegate implements the didSelectImages method
     if delegate.implementsDidSelectImages {
       print("PHPicker: Delegate supports didSelectImages - calling with \(images.count) images")
@@ -828,7 +834,9 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
     } else {
       print("PHPicker: Delegate doesn't implement didSelectImages")
       print("PHPicker: Calling didSelectAssets with empty array as fallback")
-      print("PHPicker: Consider implementing photoLibrary(didSelectImages:) for better limited access support")
+      print(
+        "PHPicker: Consider implementing photoLibrary(didSelectImages:) for better limited access support"
+      )
       delegate.photoLibrary(didSelectAssets: [])
     }
   }
