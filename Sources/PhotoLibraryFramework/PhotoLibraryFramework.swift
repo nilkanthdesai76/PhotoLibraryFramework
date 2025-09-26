@@ -8,7 +8,7 @@ import UIKit
   @objc public static let shared = PhotoLibraryFramework()
 
   /// Framework version
-  @objc public static let frameworkVersion = "1.1.0"
+  @objc public static let frameworkVersion = "1.1.1"
 
   /// Get detailed version information
   @objc public static var versionInfo: [String: Any] {

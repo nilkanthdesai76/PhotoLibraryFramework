@@ -32,6 +32,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive documentation
 - Example usage and integration guides
 
+## [1.2.0] - 2024-12-19
+
+### Added
+- **SelectedAssetsViewController**: Complete custom photo picker for limited access scenarios
+- **Automatic picker selection**: Framework automatically chooses the right picker based on access level
+- **Perfect limited access handling**: Eliminates empty assets array issue completely
+- **Native iOS design**: Custom picker matches system photo picker appearance
+
+### Fixed
+- **Camera/Gallery selection**: Restored proper camera/gallery alert functionality
+- **Limited access flow**: Fixed issue where camera/gallery choice was bypassed
+- **Empty assets issue**: Completely resolved with SelectedAssetsViewController
+- **User experience**: Maintains intuitive flow for all permission levels
+
+### Enhanced
+- **Built-in UI components**: SelectedAssetsCell with iCloud support and loading indicators
+- **Video support**: Duration display and proper video handling
+- **Selection management**: Multi-selection with limits and visual feedback
+- **Photo library observer**: Real-time updates when photo library changes
+- **Manage photos integration**: Easy access to photo permissions management
+
+### Technical Improvements
+- **Programmatic UI**: No storyboards/xibs required
+- **Memory efficient**: Proper image loading and cell reuse
+- **Thread safety**: Proper queue management for UI updates
+- **Error handling**: Comprehensive iCloud and permission error handling
+
 ## [1.1.0] - 2024-12-19
 
 ### Added
