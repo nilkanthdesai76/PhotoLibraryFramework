@@ -6,12 +6,20 @@ import Photos
 
 public extension PHAsset {
     
+    /// Get image from PHAsset using the framework manager (async/await version)
+    /// - Parameter targetSize: Target size for the image
+    /// - Returns: UIImage if successful
+    @available(iOS 13.0, *)
+    func getImage(targetSize: CGSize? = nil) async -> UIImage? {
+        return await PhotoLibraryManager.shared.getImage(from: self, targetSize: targetSize)
+    }
+    
     /// Get image from PHAsset using the framework manager
     /// - Parameters:
     ///   - targetSize: Target size for the image
     ///   - completion: Completion handler
     func getImage(targetSize: CGSize? = nil, completion: @escaping (UIImage?) -> Void) {
-        PLFPhotoLibraryManager.shared.getImage(from: self, targetSize: targetSize) { image, _ in
+        PhotoLibraryManager.shared.getImage(from: self, targetSize: targetSize) { image, _ in
             completion(image)
         }
     }
@@ -19,7 +27,7 @@ public extension PHAsset {
     /// Check if this asset is stored in iCloud
     /// - Parameter completion: Completion handler with boolean result
     func isInCloud(completion: @escaping (Bool) -> Void) {
-        PLFPhotoLibraryManager.shared.isAssetInCloud(self, completion: completion)
+        PhotoLibraryManager.shared.isAssetInCloud(self, completion: completion)
     }
     
     /// Get asset creation date as formatted string
@@ -64,7 +72,7 @@ public extension Array where Element == PHAsset {
     ///   - targetSize: Target size for images
     ///   - completion: Completion handler with processed images
     func processAssets(targetSize: CGSize? = nil, completion: @escaping ([UIImage]) -> Void) {
-        PLFPhotoLibraryManager.shared.processAssets(self, targetSize: targetSize, completion: completion)
+        PhotoLibraryManager.shared.processAssets(self, targetSize: targetSize, completion: completion)
     }
     
     /// Get total size of all assets in MB
@@ -91,12 +99,12 @@ public extension UIViewController {
     ///   - sourceRect: Source rect for popover (iPad)
     func presentPhotoLibrary(
         delegate: PhotoLibraryDelegate,
-        mediaType: PLFMediaType = .imagesAndVideos,
+        mediaType: MediaType = .imagesAndVideos,
         selectionLimit: Int = 1,
         sourceView: UIView? = nil,
         sourceRect: CGRect = .zero
     ) {
-        PLFPhotoLibraryManager.shared.presentPhotoPicker(
+        PhotoLibraryManager.openPicker(
             delegate: delegate,
             from: self,
             mediaType: mediaType,
@@ -110,7 +118,7 @@ public extension UIViewController {
 // MARK: - Utility Classes
 
 /// Utility class for common photo operations
-@objc public class PLFPhotoUtilities: NSObject {
+@objc public class PhotoUtilities: NSObject {
     
     /// Resize image to target size
     /// - Parameters:
@@ -173,7 +181,7 @@ public extension UIViewController {
 }
 
 /// Permission utility class
-@objc public class PLFPermissionManager: NSObject {
+@objc public class PermissionManager: NSObject {
     
     /// Check current photo library permission status
     /// - Returns: Authorization status

@@ -40,8 +40,8 @@ PhotoLibraryFramework/
 ├── Sources/
 │   └── PhotoLibraryFramework/
 │       ├── PhotoLibraryFramework.swift    # Main framework class
-│       ├── PLFPhotoLibraryManager.swift   # Core manager
-│       └── PLFExtensions.swift            # Utility extensions
+│       ├── PhotoLibraryManager.swift      # Core manager
+│       └── Extensions.swift               # Utility extensions
 ├── Tests/
 │   └── PhotoLibraryFrameworkTests/
 │       └── PhotoLibraryFrameworkTests.swift
@@ -97,12 +97,12 @@ PhotoLibraryFramework/
 
 ### Core Components
 
-1. **PLFFramework** - Main framework singleton for configuration
-2. **PLFPhotoLibraryManager** - Core functionality manager
+1. **PhotoLibraryFramework** - Main framework singleton for configuration
+2. **PhotoLibraryManager** - Core functionality manager
 3. **PhotoLibraryDelegate** - Delegate protocol for callbacks
-4. **PLFPermissionManager** - Permission handling utilities
-5. **PLFPhotoUtilities** - Image processing utilities
-6. **PLFThemeProvider** - Theme management protocol
+4. **PermissionManager** - Permission handling utilities
+5. **PhotoUtilities** - Image processing utilities
+6. **ThemeProvider** - Theme management protocol
 
 ### Design Patterns Used
 
@@ -125,8 +125,8 @@ presentPhotoLibrary(
 
 ### Advanced Usage (Full customization)
 ```swift
-PLFFramework.shared.configure(with: CustomThemeProvider())
-PLFPhotoLibraryManager.shared.presentPhotoPicker(
+PhotoLibraryFramework.shared.configure(with: CustomThemeProvider())
+PhotoLibraryManager.openPicker(
     delegate: self,
     from: viewController,
     mediaType: .imagesAndVideos,

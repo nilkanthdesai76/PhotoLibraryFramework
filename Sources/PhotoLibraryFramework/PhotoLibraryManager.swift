@@ -6,7 +6,7 @@ import AVFoundation
 import UniformTypeIdentifiers
 
 // MARK: - Public Configuration
-@objc public enum PLFMediaType: Int, CaseIterable {
+@objc public enum MediaType: Int, CaseIterable {
     case images
     case videos
     case livePhotos
@@ -28,7 +28,7 @@ import UniformTypeIdentifiers
 }
 
 // MARK: - Framework Messages
-public struct PLFMessages {
+public struct Messages {
     public struct Errors {
         public static var cameraPermission = "Please enable camera permission in settings"
         public static var photoLibraryDenied = "Please enable photo library permission in settings"
@@ -72,10 +72,10 @@ public struct PLFMessages {
 }
 
 // MARK: - Main Manager Class
-@objc public final class PLFPhotoLibraryManager: NSObject {
+@objc public final class PhotoLibraryManager: NSObject {
     
     // MARK: - Public Properties
-    @objc public static let shared = PLFPhotoLibraryManager()
+    @objc public static let shared = PhotoLibraryManager()
     
     // MARK: - Private Properties
     private weak var delegate: PhotoLibraryDelegate?
@@ -84,7 +84,7 @@ public struct PLFMessages {
     private var sourceView: UIView?
     private var sourceRect: CGRect = .zero
     
-    private var currentMediaType: PLFMediaType = .imagesAndVideos
+    private var currentMediaType: MediaType = .imagesAndVideos
     private var currentSelectionLimit: Int = 1
     
     private override init() {
@@ -93,7 +93,7 @@ public struct PLFMessages {
     
     // MARK: - Public Methods
     
-    /// Present photo picker with camera and gallery options
+    /// Open photo picker with camera and gallery options
     /// - Parameters:
     ///   - delegate: Delegate to receive callbacks
     ///   - viewController: View controller to present from
@@ -101,16 +101,35 @@ public struct PLFMessages {
     ///   - selectionLimit: Maximum number of items to select (1 for single selection)
     ///   - sourceView: Source view for iPad popover presentation
     ///   - sourceRect: Source rect for iPad popover presentation
-    @objc public func presentPhotoPicker(
+    @objc public static func openPicker(
         delegate: PhotoLibraryDelegate,
         from viewController: UIViewController,
-        mediaType: PLFMediaType = .imagesAndVideos,
+        mediaType: MediaType = .imagesAndVideos,
+        selectionLimit: Int = 1,
+        sourceView: UIView? = nil,
+        sourceRect: CGRect = .zero
+    ) {
+        shared.presentPhotoPicker(
+            delegate: delegate,
+            from: viewController,
+            mediaType: mediaType,
+            selectionLimit: selectionLimit,
+            sourceView: sourceView,
+            sourceRect: sourceRect
+        )
+    }
+    
+    /// Internal method to present photo picker
+    private func presentPhotoPicker(
+        delegate: PhotoLibraryDelegate,
+        from viewController: UIViewController,
+        mediaType: MediaType = .imagesAndVideos,
         selectionLimit: Int = 1,
         sourceView: UIView? = nil,
         sourceRect: CGRect = .zero
     ) {
         guard selectionLimit > 0 else {
-            assertionFailure(PLFMessages.Errors.selectionLimit)
+            assertionFailure(Messages.Errors.selectionLimit)
             return
         }
         
@@ -122,6 +141,20 @@ public struct PLFMessages {
         self.sourceRect = sourceRect
         
         presentSourceSelectionAlert()
+    }
+    
+    /// Convert PHAsset to UIImage asynchronously with iCloud support (async/await version)
+    /// - Parameters:
+    ///   - asset: PHAsset to convert
+    ///   - size: Target size (nil for full resolution)
+    /// - Returns: UIImage if successful
+    @available(iOS 13.0, *)
+    public func getImage(from asset: PHAsset, targetSize size: CGSize? = nil) async -> UIImage? {
+        return await withCheckedContinuation { continuation in
+            getImage(from: asset, targetSize: size) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
     }
     
     /// Convert PHAsset to UIImage asynchronously with iCloud support
@@ -233,27 +266,27 @@ public struct PLFMessages {
 }
 
 // MARK: - Private Methods
-private extension PLFPhotoLibraryManager {
+private extension PhotoLibraryManager {
     
     func presentSourceSelectionAlert() {
         let alert = UIAlertController(
             title: nil,
-            message: PLFMessages.Prompts.chooseSource,
+            message: Messages.Prompts.chooseSource,
             preferredStyle: .actionSheet
         )
         
         // Camera action
-        alert.addAction(UIAlertAction(title: PLFMessages.Actions.camera, style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: Messages.Actions.camera, style: .default) { [weak self] _ in
             self?.checkCameraPermission()
         })
         
         // Gallery action
-        alert.addAction(UIAlertAction(title: PLFMessages.Actions.gallery, style: .default) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: Messages.Actions.gallery, style: .default) { [weak self] _ in
             self?.checkPhotoLibraryPermission()
         })
         
         // Cancel action
-        alert.addAction(UIAlertAction(title: PLFMessages.Actions.cancel, style: .cancel) { [weak self] _ in
+        alert.addAction(UIAlertAction(title: Messages.Actions.cancel, style: .cancel) { [weak self] _ in
             self?.delegate?.photoLibraryDidCancel()
         })
         
@@ -264,7 +297,7 @@ private extension PLFPhotoLibraryManager {
         }
         
         // Apply theme
-        let themeStyle = PLFThemeManager.shared.currentUserInterfaceStyle
+        let themeStyle = ThemeManager.shared.currentUserInterfaceStyle
         if themeStyle != .unspecified {
             alert.overrideUserInterfaceStyle = themeStyle
         }
@@ -344,8 +377,8 @@ private extension PLFPhotoLibraryManager {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
             showAlert(
                 title: "Error",
-                message: PLFMessages.Errors.cameraUnavailable,
-                actions: [PLFMessages.Actions.ok]
+                message: Messages.Errors.cameraUnavailable,
+                actions: [Messages.Actions.ok]
             )
             return
         }
@@ -356,7 +389,7 @@ private extension PLFPhotoLibraryManager {
         picker.cameraCaptureMode = .photo
         
         // Apply theme
-        let themeStyle = PLFThemeManager.shared.currentUserInterfaceStyle
+        let themeStyle = ThemeManager.shared.currentUserInterfaceStyle
         if themeStyle != .unspecified {
             picker.overrideUserInterfaceStyle = themeStyle
         }
@@ -379,7 +412,7 @@ private extension PLFPhotoLibraryManager {
             picker.delegate = self
             
             // Apply theme
-            let themeStyle = PLFThemeManager.shared.currentUserInterfaceStyle
+            let themeStyle = ThemeManager.shared.currentUserInterfaceStyle
             if themeStyle != .unspecified {
                 picker.overrideUserInterfaceStyle = themeStyle
             }
@@ -393,7 +426,7 @@ private extension PLFPhotoLibraryManager {
             picker.mediaTypes = getMediaTypes()
             
             // Apply theme
-            let themeStyle = PLFThemeManager.shared.currentUserInterfaceStyle
+            let themeStyle = ThemeManager.shared.currentUserInterfaceStyle
             if themeStyle != .unspecified {
                 picker.overrideUserInterfaceStyle = themeStyle
             }
@@ -422,9 +455,9 @@ private extension PLFPhotoLibraryManager {
         var errorMessage: String {
             switch self {
             case .camera:
-                return PLFMessages.Errors.cameraPermission
+                return Messages.Errors.cameraPermission
             case .photoLibrary:
-                return PLFMessages.Errors.photoLibraryDenied
+                return Messages.Errors.photoLibraryDenied
             }
         }
     }
@@ -433,9 +466,9 @@ private extension PLFPhotoLibraryManager {
         showAlert(
             title: "Permission Required",
             message: type.errorMessage,
-            actions: [PLFMessages.Actions.settings, PLFMessages.Actions.cancel]
+            actions: [Messages.Actions.settings, Messages.Actions.cancel]
         ) { [weak self] action in
-            if action == PLFMessages.Actions.settings {
+            if action == Messages.Actions.settings {
                 self?.openSettings()
             } else {
                 self?.delegate?.photoLibraryDidCancel()
@@ -452,14 +485,14 @@ private extension PLFPhotoLibraryManager {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         
         for actionTitle in actions {
-            let style: UIAlertAction.Style = actionTitle == PLFMessages.Actions.cancel ? .cancel : .default
+            let style: UIAlertAction.Style = actionTitle == Messages.Actions.cancel ? .cancel : .default
             alert.addAction(UIAlertAction(title: actionTitle, style: style) { _ in
                 completion?(actionTitle)
             })
         }
         
         // Apply theme
-        let themeStyle = PLFThemeManager.shared.currentUserInterfaceStyle
+        let themeStyle = ThemeManager.shared.currentUserInterfaceStyle
         if themeStyle != .unspecified {
             alert.overrideUserInterfaceStyle = themeStyle
         }
@@ -497,7 +530,7 @@ private extension PLFPhotoLibraryManager {
 }
 
 // MARK: - UIImagePickerControllerDelegate
-extension PLFPhotoLibraryManager: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+extension PhotoLibraryManager: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     
     public func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
         picker.dismiss(animated: true)
@@ -515,7 +548,7 @@ extension PLFPhotoLibraryManager: UIImagePickerControllerDelegate, UINavigationC
 
 // MARK: - PHPickerViewControllerDelegate
 @available(iOS 14.0, *)
-extension PLFPhotoLibraryManager: PHPickerViewControllerDelegate {
+extension PhotoLibraryManager: PHPickerViewControllerDelegate {
     
     public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)

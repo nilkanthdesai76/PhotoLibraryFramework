@@ -18,12 +18,14 @@ let package = Package(
         .target(
             name: "PhotoLibraryFramework",
             dependencies: [],
-            path: "Sources/PhotoLibraryFramework"
+            path: "Sources/PhotoLibraryFramework",
+            resources: []
         ),
         .testTarget(
             name: "PhotoLibraryFrameworkTests",
             dependencies: ["PhotoLibraryFramework"],
             path: "Tests/PhotoLibraryFrameworkTests"
         ),
-    ]
+    ],
+    swiftLanguageVersions: [.v5]
 )

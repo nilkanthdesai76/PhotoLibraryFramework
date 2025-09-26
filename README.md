@@ -11,6 +11,7 @@ A comprehensive iOS framework for handling photo library operations, camera capt
 - 📱 iPad popover support
 - 🔒 Comprehensive permission management
 - 🛠️ Utility functions for image processing
+- 🏷️ Version-based dependency management
 
 ## Requirements
 
@@ -26,14 +27,30 @@ Add the following to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/PhotoLibraryFramework.git", from: "1.0.0")
+    .package(url: "https://github.com/nilkanthdesai76/PhotoLibraryFramework.git", from: "1.0.0")
 ]
 ```
 
 Or add it through Xcode:
 1. File → Add Packages
-2. Enter the repository URL
-3. Select version and add to your target
+2. Enter the repository URL: `https://github.com/nilkanthdesai76/PhotoLibraryFramework.git`
+3. Select version (recommended: use exact version or version range)
+4. Add to your target
+
+### Version Management
+
+The framework uses semantic versioning. You can specify versions in several ways:
+
+```swift
+// Exact version
+.package(url: "https://github.com/nilkanthdesai76/PhotoLibraryFramework.git", .exact("1.0.0"))
+
+// Version range
+.package(url: "https://github.com/nilkanthdesai76/PhotoLibraryFramework.git", "1.0.0"..<"2.0.0")
+
+// From version (recommended for patch updates)
+.package(url: "https://github.com/nilkanthdesai76/PhotoLibraryFramework.git", from: "1.0.0")
+```
 
 ## Usage
 
@@ -48,12 +65,14 @@ class ViewController: UIViewController {
         super.viewDidLoad()
         
         // Optional: Configure theme
-        PLFFramework.shared.configure(with: MyThemeProvider())
+        PhotoLibraryFramework.shared.configure(with: MyThemeProvider())
     }
     
     @IBAction func selectPhotoTapped() {
-        presentPhotoLibrary(
+        // New API - use PhotoLibraryManager.openPicker
+        PhotoLibraryManager.openPicker(
             delegate: self,
+            from: self,
             mediaType: .images,
             selectionLimit: 5
         )
@@ -62,18 +81,26 @@ class ViewController: UIViewController {
 
 extension ViewController: PhotoLibraryDelegate {
     func photoLibrary(didSelectAssets assets: [PHAsset]) {
-        // Handle selected photos
-        assets.processAssets { images in
-            // Use processed images
+        // Handle selected photos with async/await
+        guard let firstAsset = assets.first else { return }
+        Task {
+            if let image = await PhotoLibraryManager.shared.getImage(from: firstAsset) {
+                DispatchQueue.main.async {
+                    // Use the image
+                    self.imageView.image = image
+                }
+            }
         }
     }
     
     func photoLibrary(didCaptureImage image: UIImage) {
         // Handle captured photo
+        imageView.image = image
     }
     
-    func photoLibrary(didCancel: Void) {
+    func photoLibraryDidCancel() {
         // Handle cancellation
+        print("User cancelled photo selection")
     }
 }
 ```
@@ -107,23 +134,37 @@ extension ViewController {
 
 ### PhotoLibraryFramework
 
-Main framework class for configuration.
+Main framework class for configuration and versioning.
 
 ```swift
+// Configure theme
 PhotoLibraryFramework.shared.configure(with: themeProvider)
+
+// Get framework version
+let version = PhotoLibraryFramework.frameworkVersion
+print("Using PhotoLibraryFramework v\(version)")
 ```
 
-### PLFPhotoLibraryManager
+### PhotoLibraryManager
 
-Core manager for photo operations.
+Core manager for photo operations with simplified API.
 
 ```swift
-PLFPhotoLibraryManager.shared.presentPhotoPicker(
+// Open photo picker (new simplified API)
+PhotoLibraryManager.openPicker(
     delegate: self,
     from: viewController,
     mediaType: .imagesAndVideos,
     selectionLimit: 10
 )
+
+// Get image from asset (async/await)
+let image = await PhotoLibraryManager.shared.getImage(from: asset)
+
+// Get image from asset (completion handler)
+PhotoLibraryManager.shared.getImage(from: asset) { image, info in
+    // Handle image
+}
 ```
 
 ### Media Types
@@ -135,15 +176,60 @@ PLFPhotoLibraryManager.shared.presentPhotoPicker(
 
 ### Utility Classes
 
-#### PLFPhotoUtilities
-- `resizeImage(_:to:)` - Resize images
-- `compressImage(_:quality:)` - Compress images
-- `getMetadata(for:)` - Get asset metadata
+#### PhotoUtilities
+- `resizeImage(_:to:)` - Resize images to target size
+- `compressImage(_:quality:)` - Compress images with quality
+- `getMetadata(for:)` - Get comprehensive asset metadata
 
-#### PLFPermissionManager
-- `photoLibraryAuthorizationStatus()` - Check photo permissions
+#### PermissionManager
+- `photoLibraryAuthorizationStatus()` - Check photo library permissions
 - `cameraAuthorizationStatus()` - Check camera permissions
-- `areAllPermissionsGranted()` - Check all permissions
+- `areAllPermissionsGranted()` - Check if all permissions are granted
+- `requestPhotoLibraryPermission(_:)` - Request photo library access
+- `requestCameraPermission(_:)` - Request camera access
+
+### Theme Management
+
+```swift
+// Custom theme provider
+class MyThemeProvider: ThemeProvider {
+    var userInterfaceStyle: UIUserInterfaceStyle = .dark
+    var isDarkMode: Bool = true
+}
+
+// Configure framework with theme
+PhotoLibraryFramework.shared.configure(with: MyThemeProvider())
+```
+
+## Migration from Previous Versions
+
+If you're upgrading from a version with PLF prefixes, here are the key changes:
+
+### API Changes
+- `PLFPhotoLibraryManager.shared.presentPhotoPicker()` → `PhotoLibraryManager.openPicker()`
+- `PLFPhotoUtilities` → `PhotoUtilities`
+- `PLFPermissionManager` → `PermissionManager`
+- `PLFFramework` → `PhotoLibraryFramework`
+- `PLFThemeProvider` → `ThemeProvider`
+
+### New Features in v1.0.0
+- Simplified API with static methods
+- Async/await support for modern Swift
+- Better version management
+- Improved documentation
+- Cleaner naming conventions
+
+## Version Information
+
+```swift
+// Get current version
+let version = PhotoLibraryFramework.frameworkVersion
+print("Framework version: \(version)")
+
+// Get detailed version info
+let info = PhotoLibraryFramework.versionInfo
+print("Version info: \(info)")
+```
 
 ## License
 
