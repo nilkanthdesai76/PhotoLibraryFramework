@@ -61,11 +61,14 @@ public struct Messages {
   /// Called when user takes a photo from camera
   func photoLibrary(didCaptureImage image: UIImage)
 
-  /// Called when user selects photos from library
+  /// Called when user selects photos from library (preferred method with PHAssets)
   func photoLibrary(didSelectAssets assets: [PHAsset])
 
   /// Called when user cancels the picker
   func photoLibraryDidCancel()
+
+  // Optional fallback method for when PHAssets are not available
+  @objc optional func photoLibrary(didSelectImages images: [UIImage])
 
   // Optional iCloud support methods
   @objc optional func photoLibrary(didStartDownloadingFromCloud asset: PHAsset)
@@ -436,10 +439,21 @@ extension PhotoLibraryManager {
   }
 
   fileprivate func openPhotoLibrary() {
+    print("PhotoLibrary: Opening photo library")
+    print("PhotoLibrary: Selection limit: \(currentSelectionLimit)")
+    print("PhotoLibrary: Media type: \(currentMediaType)")
+    
     if #available(iOS 14.0, *) {
+      // Check current authorization status
+      let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+      print("PhotoLibrary: Authorization status: \(authStatus.rawValue)")
+      
       var config = PHPickerConfiguration(photoLibrary: .shared())
       config.selectionLimit = currentSelectionLimit
       config.filter = currentMediaType.phPickerFilter
+      
+      // Important: Set preferredAssetRepresentationMode to ensure we get asset identifiers
+      config.preferredAssetRepresentationMode = .current
 
       if #available(iOS 15.0, *) {
         config.selection = .ordered
@@ -454,9 +468,11 @@ extension PhotoLibraryManager {
         picker.overrideUserInterfaceStyle = themeStyle
       }
 
+      print("PhotoLibrary: Presenting PHPickerViewController")
       presentingViewController?.present(picker, animated: true)
     } else {
       // Fallback to UIImagePickerController for iOS 13
+      print("PhotoLibrary: Using UIImagePickerController fallback for iOS 13")
       let picker = UIImagePickerController()
       picker.delegate = self
       picker.sourceType = .photoLibrary
@@ -600,16 +616,101 @@ extension PhotoLibraryManager: PHPickerViewControllerDelegate {
       return
     }
 
-    let identifiers = results.compactMap { $0.assetIdentifier }
+    print("PHPicker: Received \(results.count) results")
+    
+    // Check if we have asset identifiers
+    let identifiers = results.compactMap { result -> String? in
+      let identifier = result.assetIdentifier
+      print("PHPicker: Asset identifier: \(identifier ?? "nil")")
+      return identifier
+    }
+    
+    print("PHPicker: Found \(identifiers.count) valid identifiers")
+    
+    if identifiers.isEmpty {
+      // Handle case where no asset identifiers are available
+      // This can happen with limited photo library access or external sources
+      print("PHPicker: No asset identifiers available, handling results directly")
+      handlePickerResultsWithoutAssets(results)
+      return
+    }
+
     var assets: [PHAsset] = []
 
     for identifier in identifiers {
       let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
       if let asset = fetchResult.firstObject {
         assets.append(asset)
+        print("PHPicker: Successfully fetched asset for identifier: \(identifier)")
+      } else {
+        print("PHPicker: Failed to fetch asset for identifier: \(identifier)")
       }
     }
+    
+    print("PHPicker: Final assets count: \(assets.count)")
 
-    delegate?.photoLibrary(didSelectAssets: assets)
+    if assets.isEmpty {
+      // Fallback to handling results without PHAssets
+      handlePickerResultsWithoutAssets(results)
+    } else {
+      delegate?.photoLibrary(didSelectAssets: assets)
+    }
+  }
+  
+  private func handlePickerResultsWithoutAssets(_ results: [PHPickerResult]) {
+    print("PHPicker: Handling results without PHAssets - converting to UIImages")
+    
+    var processedImages: [UIImage] = []
+    let group = DispatchGroup()
+    
+    for result in results {
+      group.enter()
+      
+      if result.itemProvider.canLoadObject(ofClass: UIImage.self) {
+        result.itemProvider.loadObject(ofClass: UIImage.self) { object, error in
+          defer { group.leave() }
+          
+          if let error = error {
+            print("PHPicker: Error loading image: \(error)")
+            return
+          }
+          
+          if let image = object as? UIImage {
+            processedImages.append(image)
+            print("PHPicker: Successfully loaded image")
+          }
+        }
+      } else {
+        group.leave()
+        print("PHPicker: Cannot load object as UIImage")
+      }
+    }
+    
+    group.notify(queue: .main) {
+      print("PHPicker: Processed \(processedImages.count) images without PHAssets")
+      
+      if processedImages.isEmpty {
+        self.delegate?.photoLibraryDidCancel()
+      } else {
+        // Create temporary PHAssets or handle differently
+        // For now, we'll need to modify the delegate to handle UIImages directly
+        self.handleImagesWithoutAssets(processedImages)
+      }
+    }
+  }
+  
+  private func handleImagesWithoutAssets(_ images: [UIImage]) {
+    print("PHPicker: Handling \(images.count) images without PHAssets")
+    
+    // Try the new delegate method first
+    if let delegate = delegate, delegate.responds(to: #selector(PhotoLibraryDelegate.photoLibrary(didSelectImages:))) {
+      print("PHPicker: Using didSelectImages delegate method")
+      delegate.photoLibrary?(didSelectImages: images)
+    } else {
+      // Fallback: call didSelectAssets with empty array and log warning
+      print("PHPicker: Warning - didSelectImages not implemented, calling didSelectAssets with empty array")
+      print("PHPicker: Consider implementing photoLibrary(didSelectImages:) for better compatibility")
+      delegate?.photoLibrary(didSelectAssets: [])
+    }
   }
 }

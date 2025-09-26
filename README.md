@@ -110,8 +110,19 @@ class ViewController: UIViewController {
 
 extension ViewController: PhotoLibraryDelegate {
     func photoLibrary(didSelectAssets assets: [PHAsset]) {
-        // Handle multiple selected photos
+        // Handle multiple selected photos with PHAssets (preferred)
+        if assets.isEmpty {
+            print("Warning: Received empty assets array - check photo library permissions")
+            return
+        }
         processSelectedAssets(assets)
+    }
+    
+    // Optional: Handle images when PHAssets are not available (fallback)
+    func photoLibrary(didSelectImages images: [UIImage]) {
+        // This is called when PHAssets are not available (limited photo access, etc.)
+        print("Received \(images.count) images without PHAssets")
+        handleSelectedImages(images)
     }
     
     func photoLibrary(didCaptureImage image: UIImage) {
@@ -534,6 +545,60 @@ If you're upgrading from a version with PLF prefixes, here are the key changes:
 - Better version management
 - Improved documentation
 - Cleaner naming conventions
+
+## Troubleshooting
+
+### Empty Assets Array Issue
+
+If you're receiving an empty assets array in `didSelectAssets`, this can happen due to:
+
+1. **Limited Photo Library Access**: User granted limited access to photos
+2. **Photo Source**: Photos from external sources (AirDrop, etc.) may not have PHAssets
+3. **Permission Issues**: Insufficient photo library permissions
+
+**Solution**: Implement the optional `didSelectImages` delegate method:
+
+```swift
+extension ViewController: PhotoLibraryDelegate {
+    func photoLibrary(didSelectAssets assets: [PHAsset]) {
+        if assets.isEmpty {
+            print("Empty assets - will fallback to didSelectImages if available")
+            return
+        }
+        // Handle PHAssets normally
+    }
+    
+    // Add this optional method for fallback
+    func photoLibrary(didSelectImages images: [UIImage]) {
+        print("Fallback: Received \(images.count) images without PHAssets")
+        // Handle UIImages directly
+        for image in images {
+            // Process image
+        }
+    }
+}
+```
+
+### Debug Information
+
+Enable console logging to see detailed picker information:
+
+```swift
+// The framework automatically logs debug information to console
+// Look for logs starting with "PHPicker:" or "PhotoLibrary:"
+```
+
+### Permission Checking
+
+```swift
+// Check current permissions
+let status = PermissionManager.photoLibraryAuthorizationStatus()
+print("Photo library status: \(status)")
+
+if status == .limited {
+    print("Limited access - some photos may not have PHAssets")
+}
+```
 
 ## Version Information
 
